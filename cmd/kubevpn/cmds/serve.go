@@ -1,7 +1,6 @@
 package cmds
 
 import (
-	"context"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
@@ -29,10 +28,12 @@ var ServerCmd = &cobra.Command{
 		util.InitLogger(config.Debug)
 		go func() { log.Info(http.ListenAndServe("localhost:6060", nil)) }()
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := handler.Start(context.TODO(), route); err != nil {
-			log.Fatal(err)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		err := handler.StartTunServer(cmd.Context(), route)
+		if err != nil {
+			return err
 		}
-		select {}
+		<-cmd.Context().Done()
+		return nil
 	},
 }

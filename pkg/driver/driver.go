@@ -22,13 +22,13 @@ func InstallTunTapDriver() {
 	}
 }
 
-func InstallWireGuardTunDriver() {
+func InstallWireGuardTunDriver(logger *log.Logger) {
 	if err := retry.OnError(retry.DefaultRetry, func(err error) bool {
 		return err != nil
 	}, func() error {
 		return wintun.InstallWintunDriver()
 	}); err != nil {
-		log.Warn(err)
+		logger.Warn(err)
 	}
 }
 

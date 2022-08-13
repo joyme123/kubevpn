@@ -6,7 +6,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"k8s.io/client-go/util/retry"
 )
 
 type Server struct {
@@ -21,7 +20,8 @@ func (s *Server) Serve(ctx context.Context) error {
 	var tempDelay time.Duration
 	go func() {
 		<-ctx.Done()
-		if err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return err != nil }, l.Close); err != nil {
+		err := l.Close()
+		if err != nil {
 			log.Warnf("error while close listener, err: %v", err)
 		}
 	}()

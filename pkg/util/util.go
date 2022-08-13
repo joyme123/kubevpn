@@ -12,6 +12,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -462,14 +463,12 @@ func Heartbeats(ctx context.Context) {
 }
 
 func WaitPortToBeFree(ctx context.Context, port int) error {
-	log.Infoln(fmt.Sprintf("wait port %v to be free...", port))
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("wait port %v to be free timeout", port)
 		case <-time.Tick(time.Second * 2):
 			if !IsPortListening(port) {
-				log.Infoln(fmt.Sprintf("port %v are free", port))
 				return nil
 			}
 		}
@@ -484,4 +483,38 @@ func IsPortListening(port int) bool {
 		listener.Close()
 		return false
 	}
+}
+
+var mac net.HardwareAddr
+
+func GetMacAddress() net.HardwareAddr {
+	if mac != nil {
+		return mac
+	}
+	data, _ := net.Interfaces()
+	sort.SliceStable(data, func(i, j int) bool { return data[i].Name > data[j].Name })
+	for _, ifc := range data {
+		if ifc.HardwareAddr != nil {
+			if ifc.Flags&net.FlagUp|net.FlagMulticast|net.FlagBroadcast ==
+				net.FlagUp|net.FlagMulticast|net.FlagBroadcast {
+				mac = ifc.HardwareAddr
+				return mac
+			}
+		}
+	}
+	for _, ifc := range data {
+		if ifc.HardwareAddr != nil {
+			if ifc.Flags&net.FlagUp == net.FlagUp {
+				mac = ifc.HardwareAddr
+				return mac
+			}
+		}
+	}
+	for _, ifc := range data {
+		if ifc.HardwareAddr != nil {
+			mac = ifc.HardwareAddr
+			return mac
+		}
+	}
+	return net.HardwareAddr{0x00, 0x00, 0x5e, 0x00, 0x53, 0x01}
 }

@@ -31,17 +31,17 @@ import (
 	"github.com/wencaiwulue/kubevpn/pkg/util"
 )
 
-func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, trafficManagerIP string, nodeCIDR []*net.IPNet) (net.IP, error) {
+func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, trafficManagerIP string, nodeCIDR []*net.IPNet, logger *log.Logger) (net.IP, error) {
 	podInterface := clientset.CoreV1().Pods(namespace)
 	serviceInterface := clientset.CoreV1().Services(namespace)
 
 	service, err := serviceInterface.Get(context.Background(), config.PodTrafficManager, metav1.GetOptions{})
 	if err == nil && service != nil {
-		log.Infoln("traffic manager already exist, reuse it")
+		logger.Infoln("traffic manager already exist, reuse it")
 		updateServiceRefCount(serviceInterface, service.GetName(), 1)
 		return net.ParseIP(service.Spec.ClusterIP), nil
 	}
-	log.Infoln("traffic manager not exist, try to create it...")
+	logger.Infoln("traffic manager not exist, try to create it...")
 	udp8422 := "8422-for-udp"
 	tcp10800 := "10800-for-tcp"
 	tcp9002 := "9002-for-envoy"
@@ -204,7 +204,7 @@ out:
 		case e := <-watchStream.ResultChan():
 			if podT, ok := e.Object.(*v1.Pod); ok {
 				if phase != podT.Status.Phase {
-					log.Infof("pod %s status is %s", config.PodTrafficManager, podT.Status.Phase)
+					logger.Infof("pod %s status is %s", config.PodTrafficManager, podT.Status.Phase)
 				}
 				if podT.Status.Phase == v1.PodRunning {
 					break out

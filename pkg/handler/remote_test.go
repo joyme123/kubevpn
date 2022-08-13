@@ -122,7 +122,7 @@ func TestGetTopControllerByLabel(t *testing.T) {
 }
 
 func TestPreCheck(t *testing.T) {
-	options := ConnectOptions{
+	options := ReverseOptions{
 		KubeconfigPath: filepath.Join(homedir.HomeDir(), ".kube", "mesh"),
 		Namespace:      "naison-test",
 		Mode:           "reverse",

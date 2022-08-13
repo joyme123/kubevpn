@@ -3,10 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 
 	log "github.com/sirupsen/logrus"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,36 +17,27 @@ import (
 	"github.com/wencaiwulue/kubevpn/pkg/dns"
 )
 
-var stopChan = make(chan os.Signal)
 var RollbackFuncList = make([]func(), 2)
-var ctx, cancel = context.WithCancel(context.TODO())
 
-func (c *ConnectOptions) addCleanUpResourceHandler(clientset *kubernetes.Clientset, namespace string) {
-	signal.Notify(stopChan, os.Interrupt, os.Kill, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGKILL /*, syscall.SIGSTOP*/)
-	go func() {
-		<-stopChan
-		log.Info("prepare to exit, cleaning up")
-		dns.CancelDNS()
-		if err := c.dhcp.ReleaseIpToDHCP(c.usedIPs...); err != nil {
-			log.Errorf("failed to release ip to dhcp, err: %v", err)
-		}
-		cancel()
-		for _, function := range RollbackFuncList {
-			if function != nil {
-				function()
-			}
-		}
-		cleanUpTrafficManagerIfRefCountIsZero(clientset, namespace)
-		log.Info("clean up successful")
-		os.Exit(0)
-	}()
-}
+func Cleanup(f func() error, client *kubernetes.Clientset, namespace string) {
+	log.Infoln("prepare to exit, cleaning up")
+	dns.CancelDNS()
 
-func Cleanup(s os.Signal) {
-	select {
-	case stopChan <- s:
-	default:
+	for _, function := range RollbackFuncList {
+		if function != nil {
+			function()
+		}
 	}
+
+	RollbackFuncList = RollbackFuncList[0:0]
+
+	err := f()
+	if err != nil {
+		log.Errorln(err)
+	}
+
+	cleanUpTrafficManagerIfRefCountIsZero(client, namespace)
+	log.Infoln("clean up successful")
 }
 
 // vendor/k8s.io/kubectl/pkg/polymorphichelpers/rollback.go:99
@@ -78,7 +66,7 @@ func updateServiceRefCount(serviceInterface v12.ServiceInterface, name string, i
 	}); err != nil {
 		log.Errorf("update ref count error, error: %v", err)
 	} else {
-		log.Info("update ref count successfully")
+		log.Infof("update ref count successfully")
 	}
 }
 

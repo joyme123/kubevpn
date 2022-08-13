@@ -36,7 +36,9 @@ all-image: image image-mesh image-control-plane
 
 .PHONY: kubevpn
 kubevpn:
+	sudo rm -fr /usr/local/bin/kubevpn
 	make $(TARGET)
+	sudo cp $(OUTPUT_DIR)/$(TARGET) /usr/local/bin/kubevpn
 
 # ---------darwin-----------
 .PHONY: kubevpn-darwin-amd64

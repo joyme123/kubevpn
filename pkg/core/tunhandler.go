@@ -145,12 +145,6 @@ func (h *tunHandler) transportTun(ctx context.Context, tun net.Conn, conn net.Pa
 					return err
 				}
 
-				// client side, deliver packet directly.
-				if raddr != nil {
-					_, err = conn.WriteTo(b[:n], raddr)
-					return err
-				}
-
 				var src, dst net.IP
 				if waterutil.IsIPv4(b[:n]) {
 					header, err := ipv4.ParseHeader(b[:n])
@@ -175,6 +169,16 @@ func (h *tunHandler) transportTun(ctx context.Context, tun net.Conn, conn net.Pa
 				} else {
 					log.Debugf("[tun] unknown packet")
 					return nil
+				}
+
+				// client side, deliver packet directly.
+				if raddr != nil {
+					_, err = conn.WriteTo(b[:n], raddr)
+					// ignore ping each other traffic
+					if !(config.CIDR.Contains(src) && config.CIDR.Contains(dst)) {
+						log.Debugf("[tun] %s -> %s, client send package to remote addr: %v though conn: %v", src, dst, raddr, conn.LocalAddr().String())
+					}
+					return err
 				}
 
 				addr := h.findRouteFor(dst)
