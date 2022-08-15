@@ -11,6 +11,7 @@ import (
 
 const (
 	PodTrafficManager = "kubevpn-traffic-manager"
+	UsedIP            = "UsedIP"
 	DHCP              = "DHCP"
 	Envoy             = "ENVOY_CONFIG"
 

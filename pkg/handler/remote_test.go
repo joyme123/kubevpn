@@ -80,10 +80,10 @@ func TestGetIPFromDHCP(t *testing.T) {
 	}
 	_, ipNet, err := net.ParseCIDR("192.168.1.100/24")
 	manager := NewDHCPManager(clientset.CoreV1().ConfigMaps("test"), "test", ipNet)
-	manager.InitDHCP()
+	_, err = manager.InitDHCPIfNecessary(context.Background())
 	for i := 0; i < 10; i++ {
-		ipNet, err := manager.RentIPRandom()
-		ipNet2, err := manager.RentIPRandom()
+		ipNet, err := manager.rentIPRandom()
+		ipNet2, err := manager.rentIPRandom()
 		if err != nil {
 			fmt.Println(err)
 			continue

@@ -85,7 +85,7 @@ func (c *ConnectOptions) DoConnect(ctx context.Context, connectCtx context.Conte
 	}
 	logger.Infoln("CIDR are: " + strings.Join(sb, ","))
 
-	// 2) init DHCP server
+	// 2) init UsedIP server
 	trafficMangerNet := net.IPNet{IP: config.RouterIP, Mask: config.CIDR.Mask}
 	c.dhcp = NewDHCPManager(c.clientset.CoreV1().ConfigMaps(c.Namespace), c.Namespace, &trafficMangerNet)
 	err = c.InitDHCP(ctx)

@@ -72,7 +72,7 @@ func (r *ReverseOptions) createRemoteInboundPod(ctx context.Context) error {
 	tempIps := []*net.IPNet{r.LocalTunIP}
 	for _, workload := range r.Workloads {
 		if len(workload) > 0 {
-			virtualShadowIp, err := r.dhcp.RentIP(true)
+			virtualShadowIp, err := r.dhcp.RentIP()
 			if err != nil {
 				return err
 			}
