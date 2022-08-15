@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"os/exec"
-	"syscall"
-	"time"
 
+	"github.com/envoyproxy/go-control-plane/pkg/cache/v3"
+	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/wencaiwulue/kubevpn/pkg/controlplane"
 	"github.com/wencaiwulue/kubevpn/pkg/util"
 )
 
@@ -27,13 +28,29 @@ func init() {
 }
 
 func main() {
+	snapshotCache := cache.NewSnapshotCache(false, cache.IDHash{}, logger)
+	proc := controlplane.NewProcessor(snapshotCache, logger)
+
 	go func() {
-		command := exec.Command("kubevpn", "serve")
-		command.SysProcAttr = func() *syscall.SysProcAttr {
-			return &syscall.SysProcAttr{Setsid: true}
-		}()
-		command.Start()
-		go command.Wait()
+		ctx := context.Background()
+		server := serverv3.NewServer(ctx, snapshotCache, nil)
+		controlplane.RunServer(ctx, server, port)
 	}()
-	time.Sleep(time.Second * 1)
+
+	notifyCh := make(chan controlplane.NotifyMessage, 100)
+
+	notifyCh <- controlplane.NotifyMessage{
+		Operation: controlplane.Create,
+		FilePath:  watchDirectoryFileName,
+	}
+
+	go controlplane.Watch(watchDirectoryFileName, notifyCh)
+
+	for {
+		select {
+		case msg := <-notifyCh:
+			log.Infof("path: %s, event: %v", msg.FilePath, msg.Operation)
+			proc.ProcessFile(msg)
+		}
+	}
 }
