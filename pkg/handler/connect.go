@@ -54,7 +54,7 @@ func (c *ConnectOptions) InitDHCP(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	c.LocalTunIP, err = c.dhcp.RentIP(false)
+	c.LocalTunIP, err = c.dhcp.GenerateTunIP(ctx)
 	if err != nil {
 		return err
 	}

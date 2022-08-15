@@ -29,7 +29,7 @@ import (
 // https://istio.io/latest/docs/ops/deployment/requirements/#ports-used-by-istio
 
 //	patch a sidecar, using iptables to do port-forward let this pod decide should go to 233.254.254.100 or request to 127.0.0.1
-func InjectVPNAndEnvoySidecar(factory cmdutil.Factory, clientset v12.ConfigMapInterface, namespace, workloads string, c util.PodRouteConfig, headers map[string]string) error {
+func InjectVPNAndEnvoySidecar(ctx context.Context, factory cmdutil.Factory, mapInterface v12.ConfigMapInterface, namespace, workloads string, c config.PodRouteConfig, headers map[string]string) error {
 	//t := true
 	//zero := int64(0)
 	object, err := util.GetUnstructuredObject(factory, namespace, workloads)
@@ -51,9 +51,8 @@ func InjectVPNAndEnvoySidecar(factory cmdutil.Factory, clientset v12.ConfigMapIn
 	}
 	nodeID := fmt.Sprintf("%s.%s", object.Mapping.Resource.GroupResource().String(), object.Name)
 
-	err = addEnvoyConfig(clientset, nodeID, c.LocalTunIP, headers, port)
+	err = addEnvoyConfig(ctx, mapInterface, nodeID, c.LocalTunIP, headers, port)
 	if err != nil {
-		log.Warnln(err)
 		return err
 	}
 
@@ -65,7 +64,7 @@ func InjectVPNAndEnvoySidecar(factory cmdutil.Factory, clientset v12.ConfigMapIn
 	if containerNames.HasAll(config.SidecarVPN, config.SidecarEnvoyProxy) {
 		// add rollback func to remove envoy config
 		RollbackFuncList = append(RollbackFuncList, func() {
-			err = removeEnvoyConfig(clientset, nodeID, headers)
+			err := removeEnvoyConfig(mapInterface, nodeID, headers)
 			if err != nil {
 				log.Warnln(err)
 			}
@@ -100,10 +99,12 @@ func InjectVPNAndEnvoySidecar(factory cmdutil.Factory, clientset v12.ConfigMapIn
 	}
 
 	RollbackFuncList = append(RollbackFuncList, func() {
-		if err = UnPatchContainer(factory, clientset, namespace, workloads, headers); err != nil {
+		err := UnPatchContainer(factory, mapInterface, namespace, workloads, headers)
+		if err != nil {
 			log.Error(err)
 		}
-		if _, err = helper.Patch(object.Namespace, object.Name, types.JSONPatchType, restorePatch, &metav1.PatchOptions{}); err != nil {
+		_, err = helper.Patch(object.Namespace, object.Name, types.JSONPatchType, restorePatch, &metav1.PatchOptions{})
+		if err != nil {
 			log.Warnf("error while restore probe of resource: %s %s, ignore, err: %v",
 				object.Mapping.GroupVersionKind.GroupKind().String(), object.Name, err)
 		}
@@ -155,7 +156,7 @@ func UnPatchContainer(factory cmdutil.Factory, mapInterface v12.ConfigMapInterfa
 	return err
 }
 
-func addEnvoyConfig(mapInterface v12.ConfigMapInterface, nodeID string, localTUNIP string, headers map[string]string, port []v1.ContainerPort) error {
+func addEnvoyConfig(ctx context.Context, mapInterface v12.ConfigMapInterface, nodeID string, localTUNIP string, headers map[string]string, port []v1.ContainerPort) error {
 	configMap, err := mapInterface.Get(context.TODO(), config.PodTrafficManager, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -194,7 +195,7 @@ func addEnvoyConfig(mapInterface v12.ConfigMapInterface, nodeID string, localTUN
 		return err
 	}
 	configMap.Data[config.Envoy] = string(marshal)
-	_, err = mapInterface.Update(context.Background(), configMap, metav1.UpdateOptions{})
+	_, err = mapInterface.Update(ctx, configMap, metav1.UpdateOptions{})
 	return err
 }
 

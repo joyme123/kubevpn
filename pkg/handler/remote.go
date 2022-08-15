@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	v12 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"net"
 	"strconv"
 	"strings"
@@ -31,14 +32,29 @@ import (
 	"github.com/wencaiwulue/kubevpn/pkg/util"
 )
 
+func getOutBoundService(serviceInterface v12.ServiceInterface) (net.IP, bool) {
+	service, err := serviceInterface.Get(context.Background(), config.PodTrafficManager, metav1.GetOptions{})
+	if err == nil {
+		return net.ParseIP(service.Spec.ClusterIP), true
+	}
+	return nil, false
+}
+
 func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, trafficManagerIP string, nodeCIDR []*net.IPNet, logger *log.Logger) (net.IP, error) {
 	podInterface := clientset.CoreV1().Pods(namespace)
 	serviceInterface := clientset.CoreV1().Services(namespace)
 
+	serviceIP, found := getOutBoundService(serviceInterface)
+	if found {
+		logger.Infoln("traffic manager already exist, reuse it")
+		updateServiceRefCount(serviceInterface, config.PodTrafficManager, 1)
+		return serviceIP, nil
+	}
+
 	service, err := serviceInterface.Get(context.Background(), config.PodTrafficManager, metav1.GetOptions{})
 	if err == nil && service != nil {
 		logger.Infoln("traffic manager already exist, reuse it")
-		updateServiceRefCount(serviceInterface, service.GetName(), 1)
+
 		return net.ParseIP(service.Spec.ClusterIP), nil
 	}
 	logger.Infoln("traffic manager not exist, try to create it...")
@@ -218,7 +234,7 @@ out:
 	return net.ParseIP(svc.Spec.ClusterIP), nil
 }
 
-func InjectVPNSidecar(factory cmdutil.Factory, namespace, workloads string, config util.PodRouteConfig) error {
+func InjectVPNSidecar(ctx context.Context, factory cmdutil.Factory, namespace, workloads string, config config.PodRouteConfig) error {
 	object, err := util.GetUnstructuredObject(factory, namespace, workloads)
 	if err != nil {
 		return err
@@ -254,7 +270,8 @@ func InjectVPNSidecar(factory cmdutil.Factory, namespace, workloads string, conf
 		RollbackFuncList = append(RollbackFuncList, func() {
 			p2 := &v1.Pod{ObjectMeta: origin.ObjectMeta, Spec: origin.Spec}
 			CleanupUselessInfo(p2)
-			if err = createAfterDeletePod(factory, p2, helper); err != nil {
+			err := createAfterDeletePod(factory, p2, helper)
+			if err != nil {
 				log.Error(err)
 			}
 		})
@@ -272,20 +289,23 @@ func InjectVPNSidecar(factory cmdutil.Factory, namespace, workloads string, conf
 		}})
 		_, err = helper.Patch(object.Namespace, object.Name, types.JSONPatchType, bytes, &metav1.PatchOptions{})
 		if err != nil {
-			log.Errorf("error while inject proxy container, err: %v, exiting...", err)
+			log.Errorf("error while inject proxy container, err: %v", err)
 			return err
 		}
 		removePatch, restorePatch := patch(origin, path)
 		_, err = helper.Patch(object.Namespace, object.Name, types.JSONPatchType, removePatch, &metav1.PatchOptions{})
 		if err != nil {
-			log.Warnf("error while remove probe of resource: %s %s, ignore, err: %v",
+			log.Warnf("error while remove probe of resource: %s %s, err: %v",
 				object.Mapping.GroupVersionKind.GroupKind().String(), object.Name, err)
+			return err
 		}
 		RollbackFuncList = append(RollbackFuncList, func() {
-			if err = removeInboundContainer(factory, namespace, workloads); err != nil {
+			err := removeInboundContainer(factory, namespace, workloads)
+			if err != nil {
 				log.Error(err)
 			}
-			if _, err = helper.Patch(object.Namespace, object.Name, types.JSONPatchType, restorePatch, &metav1.PatchOptions{}); err != nil {
+			_, err = helper.Patch(object.Namespace, object.Name, types.JSONPatchType, restorePatch, &metav1.PatchOptions{})
+			if err != nil {
 				log.Warnf("error while restore probe of resource: %s %s, ignore, err: %v",
 					object.Mapping.GroupVersionKind.GroupKind().String(), object.Name, err)
 			}

@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/wencaiwulue/kubevpn/pkg/config"
-	"github.com/wencaiwulue/kubevpn/pkg/util"
 )
 
 func RemoveContainers(spec *v1.PodTemplateSpec) {
@@ -20,7 +19,7 @@ func RemoveContainers(spec *v1.PodTemplateSpec) {
 	}
 }
 
-func AddMeshContainer(spec *v1.PodTemplateSpec, nodeId string, c util.PodRouteConfig) {
+func AddMeshContainer(spec *v1.PodTemplateSpec, nodeId string, c config.PodRouteConfig) {
 	// remove envoy proxy containers if already exist
 	RemoveContainers(spec)
 	zero := int64(0)

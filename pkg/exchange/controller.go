@@ -5,7 +5,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/wencaiwulue/kubevpn/pkg/config"
-	"github.com/wencaiwulue/kubevpn/pkg/util"
 )
 
 func RemoveContainer(spec *corev1.PodSpec) {
@@ -17,7 +16,7 @@ func RemoveContainer(spec *corev1.PodSpec) {
 	}
 }
 
-func AddContainer(spec *corev1.PodSpec, c util.PodRouteConfig) {
+func AddContainer(spec *corev1.PodSpec, c config.PodRouteConfig) {
 	// remove vpn container if already exist
 	RemoveContainer(spec)
 	t := true

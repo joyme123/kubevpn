@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/wencaiwulue/kubevpn/pkg/daemon"
+	"github.com/wencaiwulue/kubevpn/pkg/util"
 )
 
 const ConnectInfo = "ConnectInfo"
@@ -29,7 +30,7 @@ type ConnectInfoAction struct {
 func (receiver *ConnectInfoAction) HandleStream(ctx context.Context, resp io.Writer) (err error) {
 	var logger = &log.Logger{
 		Out:       resp,
-		Formatter: new(log.TextFormatter),
+		Formatter: new(util.Format),
 		Hooks:     make(log.LevelHooks),
 		Level:     log.DebugLevel,
 	}

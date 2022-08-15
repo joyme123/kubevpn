@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/wencaiwulue/kubevpn/pkg/util"
 	"io"
 
 	"github.com/wencaiwulue/kubevpn/pkg/daemon"
@@ -34,7 +35,7 @@ type ConnectStopAction struct {
 func (receiver *ConnectStopAction) HandleStream(ctx context.Context, resp io.Writer) (err error) {
 	var logger = &log.Logger{
 		Out:       resp,
-		Formatter: new(log.TextFormatter),
+		Formatter: new(util.Format),
 		Hooks:     make(log.LevelHooks),
 		Level:     log.DebugLevel,
 	}

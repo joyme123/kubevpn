@@ -220,12 +220,10 @@ func GetUnstructuredObject(f cmdutil.Factory, namespace string, workloads string
 		TransformRequests(func(req *rest.Request) { req.Param("includeObject", "Object") }).
 		Do()
 	if err := do.Err(); err != nil {
-		log.Warn(err)
 		return nil, err
 	}
 	infos, err := do.Infos()
 	if err != nil {
-		log.Println(err)
 		return nil, err
 	}
 	if len(infos) == 0 {

@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"fmt"
+	"github.com/wencaiwulue/kubevpn/pkg/util"
 	"io"
 	"os"
 
@@ -40,7 +41,7 @@ func (r *ReverseStartAction) HandleStream(ctx context.Context, resp io.Writer) e
 	writer := io.MultiWriter(log.StandardLogger().Out, resp)
 	var logger = &log.Logger{
 		Out:       writer,
-		Formatter: new(log.TextFormatter),
+		Formatter: new(util.Format),
 		Hooks:     make(log.LevelHooks),
 		Level:     log.DebugLevel,
 	}

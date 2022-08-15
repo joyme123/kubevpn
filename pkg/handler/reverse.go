@@ -64,45 +64,39 @@ func (r *ReverseOptions) InitDHCP(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.LocalTunIP, err = r.dhcp.RentIP(false)
+	r.LocalTunIP, err = r.dhcp.GenerateTunIP(ctx)
 	return err
 }
 
-func (r *ReverseOptions) createRemoteInboundPod(ctx context.Context) (err error) {
+func (r *ReverseOptions) createRemoteInboundPod(ctx context.Context) error {
 	tempIps := []*net.IPNet{r.LocalTunIP}
-	//wg := &sync.WaitGroup{}
-	//lock := &sync.Mutex{}
 	for _, workload := range r.Workloads {
 		if len(workload) > 0 {
-			//wg.Add(1)
-			/*go*/
-			func(finalWorkload string) {
-				//defer wg.Done()
-				//lock.Lock()
-				virtualShadowIp, _ := r.dhcp.RentIP(true)
-				tempIps = append(tempIps, virtualShadowIp)
-				//lock.Unlock()
-				configInfo := util.PodRouteConfig{
-					LocalTunIP:           r.LocalTunIP.IP.String(),
-					InboundPodTunIP:      virtualShadowIp.String(),
-					TrafficManagerRealIP: r.routerIP.String(),
-					Route:                config.CIDR.String(),
-				}
-				// TODO OPTIMIZE CODE
-				if r.Mode == Mesh {
-					err = InjectVPNAndEnvoySidecar(r.factory, r.clientset.CoreV1().ConfigMaps(r.Namespace), r.Namespace, finalWorkload, configInfo, r.Headers)
-				} else {
-					err = InjectVPNSidecar(r.factory, r.Namespace, finalWorkload, configInfo)
-				}
-				if err != nil {
-					log.Error(err)
-				}
-			}(workload)
+			virtualShadowIp, err := r.dhcp.RentIP(true)
+			if err != nil {
+				return err
+			}
+
+			tempIps = append(tempIps, virtualShadowIp)
+			configInfo := config.PodRouteConfig{
+				LocalTunIP:           r.LocalTunIP.IP.String(),
+				InboundPodTunIP:      virtualShadowIp.String(),
+				TrafficManagerRealIP: r.routerIP.String(),
+				Route:                config.CIDR.String(),
+			}
+			// TODO OPTIMIZE CODE
+			if r.Mode == Mesh {
+				err = InjectVPNAndEnvoySidecar(ctx, r.factory, r.clientset.CoreV1().ConfigMaps(r.Namespace), r.Namespace, workload, configInfo, r.Headers)
+			} else {
+				err = InjectVPNSidecar(ctx, r.factory, r.Namespace, workload, configInfo)
+			}
+			if err != nil {
+				return err
+			}
 		}
 	}
-	//wg.Wait()
 	r.usedIPs = tempIps
-	return
+	return nil
 }
 
 func (r *ReverseOptions) DoReverse(ctx context.Context, logger *log.Logger) (err error) {
@@ -116,6 +110,14 @@ func (r *ReverseOptions) DoReverse(ctx context.Context, logger *log.Logger) (err
 	if err != nil {
 		return
 	}
+
+	var found bool
+	r.routerIP, found = getOutBoundService(r.clientset.CoreV1().Services(r.Namespace))
+	if !found {
+		err = errors.New("can not found outbound service")
+		return
+	}
+
 	logger.Debugln("try to create remote inbound pod...")
 	err = r.createRemoteInboundPod(ctx)
 	if err != nil {

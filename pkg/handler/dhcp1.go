@@ -296,3 +296,34 @@ func (d *DHCPManager) Release() error {
 	_, err = d.client.Update(context.Background(), configMap, metav1.UpdateOptions{})
 	return err
 }
+
+func (d *DHCPManager) GenerateTunIP(ctx context.Context) (*net.IPNet, error) {
+	get, err := d.client.Get(ctx, config.PodTrafficManager, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	mac2IP := FromStringToMac2IP(get.Data[config.MacToIP])
+	if ip := mac2IP.GetIPByMac(util.GetMacAddress().String()); len(ip) != 0 {
+		return &net.IPNet{IP: net.ParseIP(ip), Mask: net.CIDRMask(24, 32)}, nil
+	}
+	localTunIP, err := d.RentIP(false)
+	if err != nil {
+		return nil, err
+	}
+	get, err = d.client.Get(context.TODO(), config.PodTrafficManager, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	data := mac2IP.AddMacToIPRecord(util.GetMacAddress().String(), localTunIP.IP).ToString()
+	_, err = d.client.Patch(
+		context.TODO(),
+		get.Name,
+		types.MergePatchType,
+		[]byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\"}}", config.MacToIP, data)),
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return localTunIP, nil
+}

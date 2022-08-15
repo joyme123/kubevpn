@@ -1,4 +1,4 @@
-package util
+package config
 
 type PodRouteConfig struct {
 	LocalTunIP           string
