@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,10 +32,22 @@ func CallDaemonStop(ctx context.Context) error {
 
 type DaemonStopAction struct {
 	daemon.CommonAction
-	daemon.JsonHandler
+	daemon.StreamHandler
 }
 
-func (a *DaemonStopAction) HandleJson(ctx context.Context) (interface{}, error) {
+func (a *DaemonStopAction) HandleStream(ctx context.Context, resp io.Writer) (err error) {
+	writer := io.MultiWriter(log.StandardLogger().Out, resp)
+	var logger = &log.Logger{
+		Out:       writer,
+		Formatter: new(util.Format),
+		Hooks:     make(log.LevelHooks),
+		Level:     log.DebugLevel,
+	}
+
+	err = CallConnectStop(ctx, writer)
+	if err != nil {
+		return err
+	}
 	(&daemon.Options{}).Stop()
 	if util.IsWindows() {
 		if err := retry.OnError(retry.DefaultRetry, func(err error) bool {
@@ -45,11 +58,11 @@ func (a *DaemonStopAction) HandleJson(ctx context.Context) (interface{}, error) 
 			wd, _ := os.Getwd()
 			filename := filepath.Join(wd, "wintun.dll")
 			if err = os.Rename(filename, filepath.Join(os.TempDir(), "wintun.dll")); err != nil {
-				log.Warn(err)
+				logger.Warn(err)
 			}
 		}
 	}
-	return map[string]string{}, nil
+	return nil
 }
 
 func init() {

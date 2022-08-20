@@ -28,8 +28,8 @@ func init() {
 
 var reverseStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "start",
-	Long:  `start`,
+	Short: "start reverse remote resource traffic to local machine",
+	Long:  `reverse remote traffic to local machine`,
 	PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 		_, err = action.CallDaemonUptime(cmd.Context())
 		if err != nil {
@@ -52,14 +52,9 @@ var reverseStartCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		id, err := reverseOptions.GetNamespaceId()
-		if err != nil {
-			return err
-		}
 		return action.CallReverseStart(cmd.Context(), action.ReverseStartAction{
 			KubeconfigPath: reverseOptions.KubeconfigPath,
 			Namespace:      reverseOptions.Namespace,
-			NamespaceID:    id,
 			Mode:           reverseOptions.Mode,
 			Headers:        reverseOptions.Headers,
 			Workloads:      reverseOptions.Workloads,

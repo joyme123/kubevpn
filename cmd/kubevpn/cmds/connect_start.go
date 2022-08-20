@@ -25,8 +25,8 @@ func init() {
 
 var connectStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "start",
-	Long:  `start`,
+	Short: "start to connect to remote cluster",
+	Long:  `start to connect to remote cluster`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		_, err := action.CallDaemonUptime(cmd.Context())
 		if err != nil {
@@ -57,14 +57,9 @@ var connectStartCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		id, err := connect.GetNamespaceId()
-		if err != nil {
-			return err
-		}
 		req := action.ConnectStartAction{
 			KubeconfigPath: connect.KubeconfigPath,
 			Namespace:      connect.Namespace,
-			NamespaceID:    id,
 		}
 		err = action.CallConnectStart(cmd.Context(), req, os.Stdout)
 		return err

@@ -8,8 +8,6 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/wencaiwulue/kubevpn/pkg/daemon"
 	"github.com/wencaiwulue/kubevpn/pkg/handler"
 )
@@ -31,7 +29,6 @@ type ReverseStartAction struct {
 
 	KubeconfigPath string            `json:"kubeconfigPath"`
 	Namespace      string            `json:"namespace"`
-	NamespaceID    types.UID         `json:"namespaceID"`
 	Mode           handler.Mode      `json:"mode"`
 	Headers        map[string]string `json:"headers"`
 	Workloads      []string          `json:"workloads"`
@@ -49,7 +46,6 @@ func (r *ReverseStartAction) HandleStream(ctx context.Context, resp io.Writer) e
 	var options = handler.ReverseOptions{
 		KubeconfigPath: r.KubeconfigPath,
 		Namespace:      r.Namespace,
-		NamespaceID:    r.NamespaceID,
 		Mode:           r.Mode,
 		Headers:        r.Headers,
 		Workloads:      r.Workloads,
@@ -67,7 +63,6 @@ func (r *ReverseStartAction) HandleStream(ctx context.Context, resp io.Writer) e
 		req := ConnectStartAction{
 			KubeconfigPath: options.KubeconfigPath,
 			Namespace:      options.Namespace,
-			NamespaceID:    options.NamespaceID,
 		}
 		err = CallConnectStart(ctx, req, writer)
 		if err != nil {
@@ -82,13 +77,12 @@ func (r *ReverseStartAction) HandleStream(ctx context.Context, resp io.Writer) e
 
 	logger.Debugln("connected to cluster")
 
-	options.LocalTunIP = current.LocalTunIP
 	options.PreCheckResource()
 	logger.Infof("kubeconfig path: %s, namespace: %s, services: %v", r.KubeconfigPath, r.Namespace, r.Workloads)
 
 	err = options.DoReverse(ctx, logger)
 	if err != nil {
-		handler.Cleanup(options.GetDHCP().Release, options.GetClient(), options.GetNamespace())
+		options.Cleanup()
 		return err
 	}
 	logger.Println("------------------------------------------------------------------------------------------------------------------")

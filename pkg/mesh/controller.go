@@ -64,7 +64,7 @@ func AddMeshContainer(spec *v1.PodTemplateSpec, nodeId string, c config.PodRoute
 		Image:   config.ImageMesh,
 		Command: []string{"envoy", "-l", "debug", "--config-yaml"},
 		Args: []string{
-			fmt.Sprintf(s, nodeId, nodeId, c.TrafficManagerRealIP),
+			fmt.Sprintf(config.EnvoyConfig, nodeId, nodeId, c.TrafficManagerRealIP),
 		},
 		Resources: v1.ResourceRequirements{
 			Requests: map[v1.ResourceName]resource.Quantity{

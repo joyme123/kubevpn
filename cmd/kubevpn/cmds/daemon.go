@@ -10,6 +10,6 @@ func init() {
 
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
-	Short: "daemon",
-	Long:  `daemon`,
+	Short: "daemon process",
+	Long:  `daemon process`,
 }

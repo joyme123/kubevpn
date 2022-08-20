@@ -80,7 +80,7 @@ func TestGetIPFromDHCP(t *testing.T) {
 	}
 	_, ipNet, err := net.ParseCIDR("192.168.1.100/24")
 	manager := NewDHCPManager(clientset.CoreV1().ConfigMaps("test"), "test", ipNet)
-	_, err = manager.InitDHCPIfNecessary(context.Background())
+	err = manager.InitDHCPIfNecessary(context.Background())
 	for i := 0; i < 10; i++ {
 		ipNet, err := manager.rentIPRandom()
 		ipNet2, err := manager.rentIPRandom()
@@ -91,8 +91,8 @@ func TestGetIPFromDHCP(t *testing.T) {
 			fmt.Printf("%s->%s\n", ipNet.String(), ipNet2.String())
 		}
 		time.Sleep(time.Millisecond * 10)
-		err = manager.ReleaseIpToDHCP(ipNet)
-		err = manager.ReleaseIpToDHCP(ipNet2)
+		err = manager.ReleaseIpToDHCP(ipNet.IP)
+		err = manager.ReleaseIpToDHCP(ipNet2.IP)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -140,10 +140,10 @@ func init() {
 func TestBackoff(t *testing.T) {
 	var last = time.Now()
 	retry.OnError(wait.Backoff{
-		Steps:    10,
-		Duration: 40 * time.Millisecond,
+		Steps:    5,
+		Duration: 1 * time.Second,
 		Factor:   2.0,
-		Jitter:   0.5,
+		//Jitter:   0.5,
 	}, func(err error) bool {
 		return true
 	}, func() error {

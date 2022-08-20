@@ -40,28 +40,28 @@ func getOutBoundService(serviceInterface v12.ServiceInterface) (net.IP, bool) {
 	return nil, false
 }
 
-func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, trafficManagerIP string, nodeCIDR []*net.IPNet, logger *log.Logger) (net.IP, error) {
+func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, trafficManagerIP string, nodeCIDR []*net.IPNet, logger *log.Logger) error {
 	podInterface := clientset.CoreV1().Pods(namespace)
 	serviceInterface := clientset.CoreV1().Services(namespace)
 
-	serviceIP, found := getOutBoundService(serviceInterface)
+	_, found := getOutBoundService(serviceInterface)
 	if found {
 		logger.Infoln("traffic manager already exist, reuse it")
 		updateServiceRefCount(serviceInterface, config.PodTrafficManager, 1)
-		return serviceIP, nil
+		return nil
 	}
 
 	service, err := serviceInterface.Get(context.Background(), config.PodTrafficManager, metav1.GetOptions{})
 	if err == nil && service != nil {
 		logger.Infoln("traffic manager already exist, reuse it")
 
-		return net.ParseIP(service.Spec.ClusterIP), nil
+		return nil
 	}
 	logger.Infoln("traffic manager not exist, try to create it...")
 	udp8422 := "8422-for-udp"
 	tcp10800 := "10800-for-tcp"
 	tcp9002 := "9002-for-envoy"
-	svc, err := serviceInterface.Create(context.Background(), &v1.Service{
+	_, err = serviceInterface.Create(context.Background(), &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        config.PodTrafficManager,
 			Namespace:   namespace,
@@ -89,7 +89,7 @@ func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, traffi
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	args := []string{
@@ -207,11 +207,11 @@ func CreateOutboundPod(clientset *kubernetes.Clientset, namespace string, traffi
 		LabelSelector: fields.OneTermEqualSelector("app", config.PodTrafficManager).String(),
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer watchStream.Stop()
 	if _, err = clientset.AppsV1().Deployments(namespace).Create(context.TODO(), deployment, metav1.CreateOptions{}); err != nil {
-		return nil, err
+		return err
 	}
 	var phase v1.PodPhase
 out:
@@ -228,10 +228,10 @@ out:
 				phase = podT.Status.Phase
 			}
 		case <-time.Tick(time.Minute * 10):
-			return nil, errors.New(fmt.Sprintf("wait pod %s to be ready timeout", config.PodTrafficManager))
+			return errors.New(fmt.Sprintf("wait pod %s to be ready timeout", config.PodTrafficManager))
 		}
 	}
-	return net.ParseIP(svc.Spec.ClusterIP), nil
+	return nil
 }
 
 func InjectVPNSidecar(ctx context.Context, factory cmdutil.Factory, namespace, workloads string, config config.PodRouteConfig) error {
@@ -252,6 +252,8 @@ func InjectVPNSidecar(ctx context.Context, factory cmdutil.Factory, namespace, w
 	helper := pkgresource.NewHelper(object.Client, object.Mapping)
 
 	exchange.AddContainer(&podTempSpec.Spec, config)
+
+	//id := fmt.Sprintf("%s/%s", namespace, workloads)
 
 	// pods without controller
 	if len(path) == 0 {

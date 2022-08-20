@@ -11,7 +11,7 @@ import (
 
 const (
 	PodTrafficManager = "kubevpn-traffic-manager"
-	UsedIP            = "UsedIP"
+	UsedIP            = "USED_IP"
 	DHCP              = "DHCP"
 	Envoy             = "ENVOY_CONFIG"
 
@@ -25,11 +25,11 @@ const (
 
 	Port = 10800
 
-	OriginData string = "origin_data"
-	REVERSE    string = "REVERSE"
-	Connect    string = "Connect"
-	MacToIP    string = "MAC_TO_IP"
-	Splitter   string = "#"
+	OriginData = "origin_data"
+	REVERSE    = "REVERSE"
+	CONNECT    = "CONNECT"
+	MAC2IP     = "MAC2IP"
+	SPLITTER   = "#"
 )
 
 var (
@@ -84,4 +84,11 @@ func init() {
 			panic(err)
 		}
 	}
+}
+
+type PodRouteConfig struct {
+	LocalTunIP           string
+	InboundPodTunIP      string
+	TrafficManagerRealIP string
+	Route                string
 }

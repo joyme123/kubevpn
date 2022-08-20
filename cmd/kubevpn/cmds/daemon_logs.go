@@ -11,8 +11,8 @@ func init() {
 
 var logsCmd = &cobra.Command{
 	Use:   "logs",
-	Short: "logs",
-	Long:  `logs`,
+	Short: "logs for daemon process",
+	Long:  `logs for daemon process`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return action.CallDaemonLogs(cmd.Context())
 	},

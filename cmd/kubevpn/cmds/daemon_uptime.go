@@ -27,7 +27,7 @@ var daemonUptimeCmd = &cobra.Command{
 			}
 			return err
 		}
-		fmt.Println(time.Now().Sub(time.Unix(uptime, 0)).String())
+		println(time.Now().Sub(time.Unix(uptime, 0)).String())
 		return nil
 	},
 }

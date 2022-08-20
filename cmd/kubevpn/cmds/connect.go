@@ -8,6 +8,6 @@ func init() {
 
 var connectCmd = &cobra.Command{
 	Use:   "connect",
-	Short: "connect",
-	Long:  `connect`,
+	Short: "connect to cluster",
+	Long:  `connect to cluster`,
 }

@@ -30,8 +30,8 @@ func init() {
 
 var reverseStopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "stop",
-	Long:  `stop`,
+	Short: "stop reverse traffic to local machine",
+	Long:  `quit reverse traffic mode`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		_, err := action.CallDaemonUptime(context.Background())
 		if err != nil {
@@ -54,14 +54,9 @@ var reverseStopCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		id, err := reverseOptions.GetNamespaceId()
-		if err != nil {
-			return err
-		}
 		return action.CallReverseStop(cmd.Context(), action.ReverseStartAction{
 			KubeconfigPath: reverseOptions.KubeconfigPath,
 			Namespace:      reverseOptions.Namespace,
-			NamespaceID:    id,
 			Mode:           reverseOptions.Mode,
 			Headers:        reverseOptions.Headers,
 			Workloads:      reverseOptions.Workloads,

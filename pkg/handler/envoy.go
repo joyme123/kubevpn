@@ -61,14 +61,15 @@ func InjectVPNAndEnvoySidecar(ctx context.Context, factory cmdutil.Factory, mapI
 	for _, container := range templateSpec.Spec.Containers {
 		containerNames.Insert(container.Name)
 	}
+	id := fmt.Sprintf("%s/%s", namespace, workloads)
 	if containerNames.HasAll(config.SidecarVPN, config.SidecarEnvoyProxy) {
 		// add rollback func to remove envoy config
-		RollbackFuncList = append(RollbackFuncList, func() {
+		MapFunc[id] = func() {
 			err := removeEnvoyConfig(mapInterface, nodeID, headers)
 			if err != nil {
 				log.Warnln(err)
 			}
-		})
+		}
 		return nil
 	}
 
@@ -97,8 +98,7 @@ func InjectVPNAndEnvoySidecar(ctx context.Context, factory cmdutil.Factory, mapI
 		log.Warnf("error while remove probe of resource: %s %s, ignore, err: %v",
 			object.Mapping.GroupVersionKind.GroupKind().String(), object.Name, err)
 	}
-
-	RollbackFuncList = append(RollbackFuncList, func() {
+	MapFunc[id] = func() {
 		err := UnPatchContainer(factory, mapInterface, namespace, workloads, headers)
 		if err != nil {
 			log.Error(err)
@@ -108,7 +108,7 @@ func InjectVPNAndEnvoySidecar(ctx context.Context, factory cmdutil.Factory, mapI
 			log.Warnf("error while restore probe of resource: %s %s, ignore, err: %v",
 				object.Mapping.GroupVersionKind.GroupKind().String(), object.Name, err)
 		}
-	})
+	}
 	_ = util.RolloutStatus(factory, namespace, workloads, time.Minute*5)
 	return err
 }

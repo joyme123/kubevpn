@@ -1,6 +1,6 @@
-package mesh
+package config
 
-var s = `
+var EnvoyConfig = `
 node:
   cluster: %s
   id: %s

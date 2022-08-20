@@ -8,7 +8,6 @@ import (
 	"io"
 
 	"github.com/wencaiwulue/kubevpn/pkg/daemon"
-	"github.com/wencaiwulue/kubevpn/pkg/handler"
 )
 
 const ConnectStop = "ConnectStop"
@@ -46,7 +45,7 @@ func (receiver *ConnectStopAction) HandleStream(ctx context.Context, resp io.Wri
 
 	connectCancel()
 
-	handler.Cleanup(current.GetDHCP().Release, current.GetClient(), current.GetNamespace())
+	current.Cleanup()
 	current = nil
 	logger.Infoln("success disconnect from cluster")
 	return

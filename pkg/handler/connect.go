@@ -3,6 +3,9 @@ package handler
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/util/retry"
 	"net"
 	"os"
 	"strconv"
@@ -19,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -43,34 +45,19 @@ type ConnectOptions struct {
 	cidrs          []*net.IPNet
 	dhcp           *DHCPManager
 	route          Route
-	// needs to give it back to dhcp
-	usedIPs    []*net.IPNet
-	routerIP   net.IP
-	LocalTunIP *net.IPNet
+	localTunIP     *net.IPNet
 }
 
 func (c *ConnectOptions) InitDHCP(ctx context.Context) error {
-	_, err := c.dhcp.InitDHCPIfNecessary(ctx)
+	err := c.dhcp.InitDHCPIfNecessary(ctx)
 	if err != nil {
 		return err
 	}
-	c.LocalTunIP, err = c.dhcp.GenerateTunIP(ctx)
+	c.localTunIP, err = c.dhcp.GenerateTunIP(ctx, true)
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-func (c *ConnectOptions) GetDHCP() *DHCPManager {
-	return c.dhcp
-}
-
-func (c *ConnectOptions) GetClient() *kubernetes.Clientset {
-	return c.clientset
-}
-
-func (c *ConnectOptions) GetNamespace() string {
-	return c.Namespace
 }
 
 func (c *ConnectOptions) DoConnect(ctx context.Context, connectCtx context.Context, logger *log.Logger) (err error) {
@@ -94,7 +81,7 @@ func (c *ConnectOptions) DoConnect(ctx context.Context, connectCtx context.Conte
 	}
 
 	// 3) create pods traffic-manager
-	c.routerIP, err = CreateOutboundPod(c.clientset, c.Namespace, trafficMangerNet.String(), c.cidrs, logger)
+	err = CreateOutboundPod(c.clientset, c.Namespace, trafficMangerNet.String(), c.cidrs, logger)
 	if err != nil {
 		return
 	}
@@ -115,7 +102,7 @@ func (c *ConnectOptions) DoConnect(ctx context.Context, connectCtx context.Conte
 
 	// 5) start local tunnel service
 	c.setRouteInfo()
-	logger.Info("your ip is " + c.LocalTunIP.IP.String())
+	logger.Info("your ip is " + c.localTunIP.IP.String())
 	util.InitLogger(true)
 	err = StartTunServer(connectCtx, c.route)
 	if err != nil {
@@ -155,9 +142,20 @@ func (c *ConnectOptions) portForward(ctx context.Context, port int) error {
 	go func() {
 		for ctx.Err() == nil {
 			func() {
-				podList, err := c.GetRunningPodList(ctx)
+				err := retry.OnError(wait.Backoff{
+					Steps:    10,
+					Duration: 1 * time.Second,
+					Factor:   2.0,
+				}, func(err error) bool {
+					return err != nil
+				}, func() error {
+					podList, err := c.GetRunningPodList(ctx)
+					if err == nil {
+						curPodName.Store(podList[0].Name)
+					}
+					return err
+				})
 				if err != nil {
-					time.Sleep(time.Second * 1)
 					return
 				}
 				childCtx, cancelFunc = context.WithCancel(ctx)
@@ -165,7 +163,7 @@ func (c *ConnectOptions) portForward(ctx context.Context, port int) error {
 				if !first {
 					readyChan = nil
 				}
-				podName := podList[0].GetName()
+				podName := curPodName.Load().(string)
 				// if port-forward occurs error, check pod is deleted or not, speed up fail
 				runtime.ErrorHandlers = []func(error){func(err error) {
 					pod, err := podInterface.Get(childCtx, podName, metav1.GetOptions{})
@@ -173,7 +171,36 @@ func (c *ConnectOptions) portForward(ctx context.Context, port int) error {
 						cancelFunc()
 					}
 				}}
-				curPodName.Store(podName)
+
+				// try to detect pod is delete event, if pod is deleted, needs to redo port-forward
+				go func(podName string) {
+					for childCtx.Err() == nil {
+						func() {
+							stream, err := podInterface.Watch(childCtx, metav1.ListOptions{
+								FieldSelector: fields.OneTermEqualSelector("metadata.name", podName).String(),
+							})
+							if apierrors.IsNotFound(err) {
+								cancelFunc()
+								return
+							}
+							if err != nil {
+								time.Sleep(30 * time.Second)
+								return
+							}
+							defer stream.Stop()
+							for childCtx.Err() == nil {
+								select {
+								case e, ok := <-stream.ResultChan():
+									if ok && e.Type == watch.Deleted {
+										cancelFunc()
+										return
+									}
+								}
+							}
+						}()
+					}
+				}(podName)
+
 				err = util.PortForwardPod(
 					c.config,
 					c.restclient,
@@ -203,38 +230,6 @@ func (c *ConnectOptions) portForward(ctx context.Context, port int) error {
 		}
 	}()
 
-	// try to detect pod is delete event, if pod is deleted, needs to redo port-forward
-	go func() {
-		for ctx.Err() == nil {
-			func() {
-				podName := curPodName.Load()
-				if podName == nil || childCtx == nil || cancelFunc == nil {
-					time.Sleep(2 * time.Second)
-					return
-				}
-				stream, err := podInterface.Watch(childCtx, metav1.ListOptions{
-					FieldSelector: fields.OneTermEqualSelector("metadata.name", podName.(string)).String(),
-				})
-				if apierrors.IsForbidden(err) {
-					time.Sleep(30 * time.Second)
-					return
-				}
-				if err != nil {
-					return
-				}
-				defer stream.Stop()
-				for childCtx.Err() == nil {
-					select {
-					case e := <-stream.ResultChan():
-						if e.Type == watch.Deleted {
-							cancelFunc()
-							return
-						}
-					}
-				}
-			}()
-		}
-	}()
 	select {
 	case <-time.Tick(time.Second * 60):
 		return errors.New("port forward timeout")
@@ -248,7 +243,7 @@ func (c *ConnectOptions) portForward(ctx context.Context, port int) error {
 func (c *ConnectOptions) setRouteInfo() {
 	// todo figure it out why
 	if util.IsWindows() {
-		c.LocalTunIP.Mask = net.CIDRMask(0, 32)
+		c.localTunIP.Mask = net.CIDRMask(0, 32)
 	}
 	var list = []string{config.CIDR.String()}
 	for _, ipNet := range c.cidrs {
@@ -256,23 +251,11 @@ func (c *ConnectOptions) setRouteInfo() {
 	}
 	c.route = Route{
 		ServeNodes: []string{
-			fmt.Sprintf("tun:/127.0.0.1:8422?net=%s&route=%s", c.LocalTunIP.String(), strings.Join(list, ",")),
+			fmt.Sprintf("tun:/127.0.0.1:8422?net=%s&route=%s", c.localTunIP.String(), strings.Join(list, ",")),
 		},
-		ChainNode: "tcp://127.0.0.1:10800",
+		ChainNode: fmt.Sprintf("tcp://%s:%d", "127.0.0.1", config.Port),
 		Retries:   5,
 	}
-}
-
-func (c *ConnectOptions) GetNamespaceId() (types.UID, error) {
-	if c.NamespaceID != "" {
-		return c.NamespaceID, nil
-	}
-	namespace, err := c.clientset.CoreV1().Namespaces().Get(context.Background(), c.Namespace, metav1.GetOptions{})
-	if err != nil {
-		return "", err
-	}
-	c.NamespaceID = namespace.GetUID()
-	return c.NamespaceID, nil
 }
 
 func (c *ConnectOptions) deleteFirewallRule(ctx context.Context) {
@@ -298,11 +281,11 @@ func (c *ConnectOptions) detectConflictDevice() error {
 }
 
 func (c *ConnectOptions) setupDNS(ctx context.Context) error {
-	pod, err := c.GetRunningPodList(ctx)
+	podList, err := c.GetRunningPodList(ctx)
 	if err != nil {
 		return err
 	}
-	relovConf, err := dns.GetDNSServiceIPFromPod(c.clientset, c.restclient, c.config, pod[0].GetName(), c.Namespace)
+	relovConf, err := dns.GetDNSServiceIPFromPod(c.clientset, c.restclient, c.config, podList[0].GetName(), c.Namespace)
 	if err != nil {
 		return err
 	}
@@ -451,6 +434,10 @@ func (c *ConnectOptions) InitClient() (err error) {
 			return
 		}
 	}
+	c.NamespaceID, err = util.GetNamespaceId(c.clientset.CoreV1().Namespaces(), c.Namespace)
+	if err != nil {
+		return err
+	}
 	return
 }
 
@@ -471,4 +458,17 @@ func (c *ConnectOptions) GetRunningPodList(ctx context.Context) ([]v1.Pod, error
 		return nil, errors.New("can not found any running pod")
 	}
 	return list.Items, nil
+}
+
+func (c *ConnectOptions) Cleanup() {
+	log.Infoln("prepare to exit, cleaning up")
+	dns.CancelDNS()
+
+	err := c.dhcp.Release()
+	if err != nil {
+		log.Errorln(err)
+	}
+
+	cleanUpTrafficManagerIfRefCountIsZero(c.clientset, c.Namespace)
+	log.Infoln("clean up successful")
 }

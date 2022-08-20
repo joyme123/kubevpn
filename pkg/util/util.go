@@ -28,12 +28,14 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	runtimeresource "k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	v12 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/remotecommand"
@@ -515,4 +517,12 @@ func GetMacAddress() net.HardwareAddr {
 		}
 	}
 	return net.HardwareAddr{0x00, 0x00, 0x5e, 0x00, 0x53, 0x01}
+}
+
+func GetNamespaceId(namespaceInterface v12.NamespaceInterface, ns string) (types.UID, error) {
+	namespace, err := namespaceInterface.Get(context.Background(), ns, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return namespace.UID, nil
 }

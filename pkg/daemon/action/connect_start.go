@@ -6,7 +6,6 @@ import (
 	"io"
 
 	log "github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/wencaiwulue/kubevpn/pkg/daemon"
 	"github.com/wencaiwulue/kubevpn/pkg/driver"
@@ -38,9 +37,8 @@ type ConnectStartAction struct {
 	daemon.StreamHandler
 	daemon.CommonAction
 
-	KubeconfigPath string    `json:"kubeconfigPath"`
-	Namespace      string    `json:"namespace"`
-	NamespaceID    types.UID `json:"namespaceID"`
+	KubeconfigPath string `json:"kubeconfigPath"`
+	Namespace      string `json:"namespace"`
 }
 
 func (receiver *ConnectStartAction) HandleStream(ctx context.Context, resp io.Writer) (err error) {
@@ -53,7 +51,6 @@ func (receiver *ConnectStartAction) HandleStream(ctx context.Context, resp io.Wr
 	var temp = &handler.ConnectOptions{
 		KubeconfigPath: receiver.KubeconfigPath,
 		Namespace:      receiver.Namespace,
-		NamespaceID:    receiver.NamespaceID,
 	}
 	err = temp.InitClient()
 	if err != nil {
@@ -83,7 +80,7 @@ func (receiver *ConnectStartAction) HandleStream(ctx context.Context, resp io.Wr
 
 	defer func() {
 		if err != nil {
-			handler.Cleanup(current.GetDHCP().Release, current.GetClient(), current.GetNamespace())
+			current.Cleanup()
 			// cleanup
 			current = nil
 		}
